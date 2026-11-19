@@ -1,0 +1,95 @@
+<!-- BLOCO OPCIONAL: SIMULADOR. Parte 1: colar dentro da <section>, antes de <div class="figwrap">. Parte 2: colar o <script> antes de </body>. O motor JS e identico ao do modelo; so SIM_CONFIG muda. -->
+<!-- ===== PARTE 1: MARCACAO ===== -->
+  <div class="sim" id="sim">
+  <div class="sim-head"><h3>Simulador</h3><span class="sim-note">Execução simulada com os dados do exercício. Nenhum LLM é chamado de verdade.</span></div>
+  <div class="sim-ask">
+    <div class="f"><label for="q">Pergunta do operador</label><input id="q" type="text" autocomplete="off"></div>
+    <button id="run" class="btn primary" type="button">Executar</button>
+    <button id="step" class="btn" type="button">Próximo passo</button>
+    <button id="reset" class="btn" type="button">Reiniciar</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="sim-grid">
+    <div aria-live="polite"><span class="k">Passo atual</span><div id="now-t" class="now-t">Escolha uma pergunta e execute.</div><div id="now-d" class="now-d">O fluxograma abaixo acende o caminho percorrido e o estado do grafo aparece ao lado.</div></div>
+    <div><span class="k">Estado do grafo</span><dl id="state"></dl></div>
+    <div><span class="k">Trace <span id="count"></span></span><ol id="trace"></ol></div>
+  </div>
+</div>
+
+<!-- ===== PARTE 2: SCRIPT ===== -->
+<script>window.SIM_CONFIG={
+/* fields: [[chave_no_estado,"rotulo exibido"],...]  (ver references/simulador.md) */
+fields:[],
+/* presets: [{tag:"ROTULO",lane:"regra|frota|fora",text:"entrada de exemplo"}] */
+presets:[],
+/* build(q) devolve a lista de passos: {n:[ids de nos],e:[ids de setas],node:"nome",t:"titulo",d:"descricao html",llm:1,tool:1,patch:{campo:valor},add:[...]} */
+build:function(q){ return []; }};
+(function(){
+var C=window.SIM_CONFIG, svg=document.querySelector('figure svg');
+var $=function(id){return document.getElementById(id)};
+var steps=[], idx=-1, timer=null, state={}, llm=0, built=false;
+var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function renderState(changed){
+  var h='';
+  C.fields.forEach(function(f){
+    var v=state[f[0]], empty=(v===undefined||(Array.isArray(v)&&!v.length));
+    var txt=empty?'—':(Array.isArray(v)?v.join(', '):v);
+    h+='<dt>'+f[1]+'</dt><dd class="'+(empty?'empty ':'')+(changed&&changed.indexOf(f[0])>-1?'chg':'')+'">'+esc(txt)+'</dd>';
+  });
+  $('state').innerHTML=h;
+}
+function renderTrace(){
+  var h='';
+  for(var i=0;i<=idx;i++){var s=steps[i];
+    h+='<li class="'+(i===idx?'cur':'')+'"><span class="m">'+s.node+'</span>'+(s.llm?'<span class="badge">LLM</span>':'')+(s.tool?'<span class="badge tl">TOOL</span>':'')+'</li>';}
+  $('trace').innerHTML=h; $('trace').scrollTop=1e5;
+  $('count').textContent=idx>=0?'· '+(idx+1)+' passos · '+llm+' chamadas ao LLM':'';
+}
+function clearMarks(){
+  svg.classList.remove('running');
+  svg.querySelectorAll('.seen,.active').forEach(function(n){n.classList.remove('seen','active')});
+}
+function mark(ids){(ids||[]).forEach(function(id){var n=document.getElementById(id); if(n)n.classList.add('active')})}
+function advance(){
+  if(!built){build()}
+  if(idx>=steps.length-1){stop();return false}
+  svg.classList.add('running');
+  svg.querySelectorAll('.active').forEach(function(n){n.classList.remove('active');n.classList.add('seen')});
+  idx++; var s=steps[idx];
+  mark(s.n); mark(s.e);
+  if(s.llm)llm++;
+  var changed=[];
+  Object.keys(s.patch||{}).forEach(function(k){state[k]=s.patch[k];changed.push(k)});
+  if(s.add){state.fontes=(state.fontes||[]).concat(s.add);if(changed.indexOf('fontes')<0)changed.push('fontes')}
+  $('now-t').textContent=s.t; $('now-d').innerHTML=s.d;
+  renderState(changed); renderTrace();
+  if(idx>=steps.length-1){stop();return false}
+  return true;
+}
+function build(){
+  clearMarks(); state={}; llm=0; idx=-1;
+  steps=C.build($('q').value.trim()); built=true; renderState(); renderTrace();
+}
+function stop(){ if(timer){clearInterval(timer);timer=null} $('run').textContent=(idx>=steps.length-1&&built)?'Executar de novo':'Executar' }
+function reset(){ stop(); built=false; steps=[]; idx=-1; state={}; llm=0; clearMarks(); renderState(); renderTrace();
+  $('now-t').textContent='Escolha uma pergunta e execute.'; $('now-d').textContent='O fluxograma abaixo acende o caminho percorrido e o estado do grafo aparece ao lado.'; $('run').textContent='Executar' }
+$('run').addEventListener('click',function(){
+  if(timer){stop();return}
+  if(built&&idx>=steps.length-1){reset()}
+  $('run').textContent='Pausar';
+  if(advance()){timer=setInterval(function(){advance()},reduce?700:1200)}
+});
+$('step').addEventListener('click',function(){ if(timer){clearInterval(timer);timer=null;$('run').textContent='Executar'} if(built&&idx>=steps.length-1){reset()} advance() });
+$('reset').addEventListener('click',reset);
+$('q').addEventListener('keydown',function(e){if(e.key==='Enter'){reset();$('run').click()}});
+$('q').addEventListener('input',reset);
+var ch=$('chips');
+C.presets.forEach(function(p){
+  var b=document.createElement('button'); b.type='button'; b.className='chip '+p.lane;
+  b.innerHTML='<i>'+p.tag+'</i>'+esc(p.text); b.addEventListener('click',function(){$('q').value=p.text;reset();$('run').click()});
+  ch.appendChild(b);
+});
+$('q').value=C.presets[0].text; renderState(); renderTrace();
+})();
+</script>
