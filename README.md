@@ -15,7 +15,7 @@ Skill do [Claude Code](https://claude.com/claude-code) que cria, edita, padroniz
 Clone o repositório direto na pasta de skills do seu projeto (ou em `~/.claude/skills/` para usar em todos os projetos):
 
 ```bash
-git clone <URL-DO-REPOSITORIO> .claude/skills/fluxograma
+git clone https://github.com/Pedrocavalcante87/Claude-Skill-fluxograma-.git .claude/skills/fluxograma
 ```
 
 Depois reinicie a sessão do Claude Code. A skill aparece como `/fluxograma`.
